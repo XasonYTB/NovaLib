@@ -1,143 +1,330 @@
-local HttpService = game:GetService("HttpService")
-local TweenService = game:GetService("TweenService")
 local CoreGui = game:GetService("CoreGui")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
 
-local NovaLib = {
-    Flags = {}, -- Stores all toggle/slider states
-    ConfigName = "NovaConfig.json",
+local NovaV2 = {
+    Flags = {},
     Theme = {
-        MainBG = Color3.fromRGB(12, 12, 18),
-        ElementBG = Color3.fromRGB(20, 20, 28),
-        Accent = Color3.fromRGB(138, 43, 226), -- Purple Neon Glow
-        Text = Color3.fromRGB(240, 240, 240)
+        Background = Color3.fromRGB(15, 15, 15),
+        GroupBoxBG = Color3.fromRGB(20, 20, 20),
+        ElementBG = Color3.fromRGB(25, 25, 25),
+        Outline = Color3.fromRGB(40, 40, 40),
+        Accent = Color3.fromRGB(105, 105, 255), -- Crisp Blue Accent
+        Text = Color3.fromRGB(220, 220, 220),
+        TextDark = Color3.fromRGB(150, 150, 150)
     }
 }
 
--- [ INTERNAL HELPERS ] --
+-- [ HELPER ] --
 local function create(className, properties)
     local inst = Instance.new(className)
-    for k, v in pairs(properties) do
-        inst[k] = v
-    end
+    for k, v in pairs(properties) do inst[k] = v end
     return inst
 end
 
--- [ PUBLIC API: WINDOW CREATION ] --
-function NovaLib:CreateWindow(config)
-    local title = config.Title or "Nova UI"
-    
-    -- Main GUI setup
+-- [ PUBLIC API: WINDOW ] --
+function NovaV2:CreateWindow(title)
     local screenGui = create("ScreenGui", {
-        Name = "NovaInterface",
-        Parent = (gethui and gethui()) or CoreGui, -- Supports exploit envs or standard studio
+        Name = "NovaV2",
+        Parent = (gethui and gethui()) or CoreGui,
         ResetOnSpawn = false
     })
 
     local mainFrame = create("Frame", {
-        Name = "Main",
-        Parent = screenGui,
-        Size = UDim2.new(0, 500, 0, 350),
-        Position = UDim2.new(0.5, -250, 0.5, -175),
-        BackgroundColor3 = self.Theme.MainBG,
+        Size = UDim2.new(0, 600, 0, 450),
+        Position = UDim2.new(0.5, -300, 0.5, -225),
+        BackgroundColor3 = self.Theme.Background,
         BorderSizePixel = 0,
-        ClipsDescendants = true
+        Parent = screenGui
     })
     
-    -- Rounded Corners & Neon Stroke (The "Unique" Look)
-    create("UICorner", { CornerRadius = UDim.new(0, 8), Parent = mainFrame })
-    create("UIStroke", { 
-        Color = self.Theme.Accent, 
-        Thickness = 1.5, 
-        Transparency = 0.4, 
-        Parent = mainFrame 
+    -- Linoria-style crisp outline
+    create("UIStroke", {Color = self.Theme.Outline, Thickness = 1, Parent = mainFrame})
+
+    local topBar = create("Frame", {
+        Size = UDim2.new(1, 0, 0, 25),
+        BackgroundColor3 = self.Theme.GroupBoxBG,
+        BorderSizePixel = 0,
+        Parent = mainFrame
+    })
+    create("UIStroke", {Color = self.Theme.Outline, Thickness = 1, Parent = topBar})
+
+    local titleText = create("TextLabel", {
+        Size = UDim2.new(1, -10, 1, 0),
+        Position = UDim2.new(0, 10, 0, 0),
+        BackgroundTransparency = 1,
+        Text = title,
+        TextColor3 = self.Theme.Text,
+        Font = Enum.Font.Code,
+        TextSize = 14,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Parent = topBar
     })
 
-    local WindowAPI = {
-        Container = mainFrame,
-        Tabs = {}
-    }
+    local tabContainer = create("Frame", {
+        Size = UDim2.new(1, -10, 1, -35),
+        Position = UDim2.new(0, 5, 0, 30),
+        BackgroundTransparency = 1,
+        Parent = mainFrame
+    })
 
-    -- [ PUBLIC API: TAB CREATION ] --
-    function WindowAPI:CreateTab(tabName)
-        local tabLayout = create("ScrollingFrame", {
-            Name = tabName,
-            Parent = mainFrame,
-            Size = UDim2.new(1, -20, 1, -40),
-            Position = UDim2.new(0, 10, 0, 30),
+    -- Simple Dragging Logic
+    local dragging, dragInput, dragStart, startPos
+    topBar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            dragStart = input.Position
+            startPos = mainFrame.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then dragging = false end
+            end)
+        end
+    end)
+    topBar.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement then dragInput = input end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            local delta = input.Position - dragStart
+            mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+
+    local WindowAPI = {}
+
+    -- [ PUBLIC API: TABS & GROUPBOXES ] --
+    function WindowAPI:CreateTab(name)
+        local tabFrame = create("Frame", {
+            Size = UDim2.new(1, 0, 1, 0),
             BackgroundTransparency = 1,
-            ScrollBarThickness = 2
+            Parent = tabContainer
         })
-        
-        create("UIListLayout", {
-            Parent = tabLayout,
-            SortOrder = Enum.SortOrder.LayoutOrder,
-            Padding = UDim.new(0, 8)
+
+        -- Left and Right Columns (The Linoria Layout)
+        local leftSide = create("Frame", {
+            Size = UDim2.new(0.5, -5, 1, 0),
+            BackgroundTransparency = 1,
+            Parent = tabFrame
         })
+        create("UIListLayout", {Padding = UDim.new(0, 10), Parent = leftSide})
+
+        local rightSide = create("Frame", {
+            Size = UDim2.new(0.5, -5, 1, 0),
+            Position = UDim2.new(0.5, 5, 0, 0),
+            BackgroundTransparency = 1,
+            Parent = tabFrame
+        })
+        create("UIListLayout", {Padding = UDim.new(0, 10), Parent = rightSide})
 
         local TabAPI = {}
 
-        -- [ PUBLIC API: BUTTON CREATION ] --
-        function TabAPI:CreateButton(btnConfig)
-            local btn = create("TextButton", {
-                Parent = tabLayout,
-                Size = UDim2.new(1, 0, 0, 35),
-                BackgroundColor3 = NovaLib.Theme.ElementBG,
-                Text = "  " .. btnConfig.Name,
-                TextColor3 = NovaLib.Theme.Text,
-                Font = Enum.Font.GothamSemibold,
-                TextSize = 14,
-                TextXAlignment = Enum.TextXAlignment.Left
-            })
-            create("UICorner", { CornerRadius = UDim.new(0, 6), Parent = btn })
+        function TabAPI:CreateGroupbox(gbTitle, side)
+            local targetSide = (side:lower() == "left") and leftSide or rightSide
 
-            btn.MouseButton1Click:Connect(function()
-                -- Button animation
-                TweenService:Create(btn, TweenInfo.new(0.1), {BackgroundColor3 = NovaLib.Theme.Accent}):Play()
-                task.wait(0.1)
-                TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = NovaLib.Theme.ElementBG}):Play()
-                
-                if btnConfig.Callback then btnConfig.Callback() end
+            local groupFrame = create("Frame", {
+                Size = UDim2.new(1, 0, 0, 20), -- Will auto-scale
+                BackgroundColor3 = NovaV2.Theme.GroupBoxBG,
+                BorderSizePixel = 0,
+                Parent = targetSide
+            })
+            create("UIStroke", {Color = NovaV2.Theme.Outline, Thickness = 1, Parent = groupFrame})
+
+            local gbLabel = create("TextLabel", {
+                Size = UDim2.new(1, -10, 0, 20),
+                Position = UDim2.new(0, 5, 0, 0),
+                BackgroundTransparency = 1,
+                Text = gbTitle,
+                TextColor3 = NovaV2.Theme.Text,
+                Font = Enum.Font.Code,
+                TextSize = 13,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                Parent = groupFrame
+            })
+
+            local gbLayout = create("UIListLayout", {
+                Padding = UDim.new(0, 5),
+                SortOrder = Enum.SortOrder.LayoutOrder,
+                Parent = groupFrame
+            })
+            
+            -- Padding for elements
+            create("UIPadding", {
+                PaddingTop = UDim.new(0, 25),
+                PaddingBottom = UDim.new(0, 5),
+                PaddingLeft = UDim.new(0, 5),
+                PaddingRight = UDim.new(0, 5),
+                Parent = groupFrame
+            })
+
+            -- Auto-scale Groupbox based on elements inside
+            gbLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+                groupFrame.Size = UDim2.new(1, 0, 0, gbLayout.AbsoluteContentSize.Y + 30)
             end)
-        end
 
-        -- [ PUBLIC API: TOGGLE CREATION ] --
-        function TabAPI:CreateToggle(tglConfig)
-            local state = tglConfig.Default or false
-            NovaLib.Flags[tglConfig.Flag] = state -- Register to saving system
+            local GroupAPI = {}
 
-            local toggleBtn = create("TextButton", {
-                Parent = tabLayout,
-                Size = UDim2.new(1, 0, 0, 35),
-                BackgroundColor3 = NovaLib.Theme.ElementBG,
-                Text = "  " .. tglConfig.Name,
-                TextColor3 = NovaLib.Theme.Text,
-                Font = Enum.Font.GothamSemibold,
-                TextSize = 14,
-                TextXAlignment = Enum.TextXAlignment.Left
-            })
-            create("UICorner", { CornerRadius = UDim.new(0, 6), Parent = toggleBtn })
+            -- [ ELEMENT: TOGGLE ] --
+            function GroupAPI:AddToggle(config)
+                local state = config.Default or false
+                NovaV2.Flags[config.Flag] = state
 
-            -- Indicator graphic
-            local indicator = create("Frame", {
-                Parent = toggleBtn,
-                Size = UDim2.new(0, 20, 0, 20),
-                Position = UDim2.new(1, -30, 0.5, -10),
-                BackgroundColor3 = state and NovaLib.Theme.Accent or Color3.fromRGB(40, 40, 50)
-            })
-            create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = indicator })
+                local tglFrame = create("TextButton", {
+                    Size = UDim2.new(1, 0, 0, 15),
+                    BackgroundTransparency = 1,
+                    Text = "",
+                    Parent = groupFrame
+                })
 
-            local function updateToggle(newState)
-                state = newState
-                NovaLib.Flags[tglConfig.Flag] = state
-                TweenService:Create(indicator, TweenInfo.new(0.2), {
-                    BackgroundColor3 = state and NovaLib.Theme.Accent or Color3.fromRGB(40, 40, 50)
-                }):Play()
-                if tglConfig.Callback then tglConfig.Callback(state) end
+                local box = create("Frame", {
+                    Size = UDim2.new(0, 12, 0, 12),
+                    Position = UDim2.new(0, 0, 0.5, -6),
+                    BackgroundColor3 = state and NovaV2.Theme.Accent or NovaV2.Theme.ElementBG,
+                    BorderSizePixel = 0,
+                    Parent = tglFrame
+                })
+                create("UIStroke", {Color = NovaV2.Theme.Outline, Thickness = 1, Parent = box})
+
+                create("TextLabel", {
+                    Size = UDim2.new(1, -20, 1, 0),
+                    Position = UDim2.new(0, 20, 0, 0),
+                    BackgroundTransparency = 1,
+                    Text = config.Name,
+                    TextColor3 = NovaV2.Theme.TextDark,
+                    Font = Enum.Font.Code,
+                    TextSize = 13,
+                    TextXAlignment = Enum.TextXAlignment.Left,
+                    Parent = tglFrame
+                })
+
+                tglFrame.MouseButton1Click:Connect(function()
+                    state = not state
+                    NovaV2.Flags[config.Flag] = state
+                    box.BackgroundColor3 = state and NovaV2.Theme.Accent or NovaV2.Theme.ElementBG
+                    if config.Callback then config.Callback(state) end
+                end)
             end
 
-            toggleBtn.MouseButton1Click:Connect(function()
-                updateToggle(not state)
-            end)
+            -- [ ELEMENT: SLIDER ] --
+            function GroupAPI:AddSlider(config)
+                local value = config.Default or config.Min
+                NovaV2.Flags[config.Flag] = value
+
+                local sliderFrame = create("Frame", {
+                    Size = UDim2.new(1, 0, 0, 35),
+                    BackgroundTransparency = 1,
+                    Parent = groupFrame
+                })
+
+                create("TextLabel", {
+                    Size = UDim2.new(1, 0, 0, 15),
+                    BackgroundTransparency = 1,
+                    Text = config.Name,
+                    TextColor3 = NovaV2.Theme.TextDark,
+                    Font = Enum.Font.Code,
+                    TextSize = 13,
+                    TextXAlignment = Enum.TextXAlignment.Left,
+                    Parent = sliderFrame
+                })
+
+                local valLabel = create("TextLabel", {
+                    Size = UDim2.new(1, 0, 0, 15),
+                    BackgroundTransparency = 1,
+                    Text = tostring(value),
+                    TextColor3 = NovaV2.Theme.Text,
+                    Font = Enum.Font.Code,
+                    TextSize = 13,
+                    TextXAlignment = Enum.TextXAlignment.Right,
+                    Parent = sliderFrame
+                })
+
+                local barBG = create("TextButton", {
+                    Size = UDim2.new(1, 0, 0, 10),
+                    Position = UDim2.new(0, 0, 0, 20),
+                    BackgroundColor3 = NovaV2.Theme.ElementBG,
+                    Text = "",
+                    AutoButtonColor = false,
+                    Parent = sliderFrame
+                })
+                create("UIStroke", {Color = NovaV2.Theme.Outline, Thickness = 1, Parent = barBG})
+
+                local fill = create("Frame", {
+                    Size = UDim2.new((value - config.Min) / (config.Max - config.Min), 0, 1, 0),
+                    BackgroundColor3 = NovaV2.Theme.Accent,
+                    BorderSizePixel = 0,
+                    Parent = barBG
+                })
+
+                -- Sliding Logic
+                local isSliding = false
+                barBG.MouseButton1Down:Connect(function() isSliding = true end)
+                UserInputService.InputEnded:Connect(function(input)
+                    if input.UserInputType == Enum.UserInputType.MouseButton1 then isSliding = false end
+                end)
+
+                RunService.RenderStepped:Connect(function()
+                    if isSliding then
+                        local mousePos = UserInputService:GetMouseLocation().X
+                        local barPos = barBG.AbsolutePosition.X
+                        local barSize = barBG.AbsoluteSize.X
+                        local percent = math.clamp((mousePos - barPos) / barSize, 0, 1)
+                        
+                        value = math.floor(config.Min + ((config.Max - config.Min) * percent))
+                        NovaV2.Flags[config.Flag] = value
+                        fill.Size = UDim2.new(percent, 0, 1, 0)
+                        valLabel.Text = tostring(value)
+                        
+                        if config.Callback then config.Callback(value) end
+                    end
+                end)
+            end
+
+            -- [ ELEMENT: DROPDOWN ] --
+            function GroupAPI:AddDropdown(config)
+                local selected = config.Default or config.Options[1]
+                NovaV2.Flags[config.Flag] = selected
+
+                local dropFrame = create("Frame", {
+                    Size = UDim2.new(1, 0, 0, 45),
+                    BackgroundTransparency = 1,
+                    Parent = groupFrame
+                })
+
+                create("TextLabel", {
+                    Size = UDim2.new(1, 0, 0, 15),
+                    BackgroundTransparency = 1,
+                    Text = config.Name,
+                    TextColor3 = NovaV2.Theme.TextDark,
+                    Font = Enum.Font.Code,
+                    TextSize = 13,
+                    TextXAlignment = Enum.TextXAlignment.Left,
+                    Parent = dropFrame
+                })
+
+                local mainBtn = create("TextButton", {
+                    Size = UDim2.new(1, 0, 0, 20),
+                    Position = UDim2.new(0, 0, 0, 20),
+                    BackgroundColor3 = NovaV2.Theme.ElementBG,
+                    Text = "  " .. tostring(selected),
+                    TextColor3 = NovaV2.Theme.Text,
+                    Font = Enum.Font.Code,
+                    TextSize = 13,
+                    TextXAlignment = Enum.TextXAlignment.Left,
+                    Parent = dropFrame
+                })
+                create("UIStroke", {Color = NovaV2.Theme.Outline, Thickness = 1, Parent = mainBtn})
+                
+                -- Simple toggle behavior for dropdown list (mockup for brevity)
+                mainBtn.MouseButton1Click:Connect(function()
+                    mainBtn.Text = "  [Clicked! Expand Logic Here]" 
+                    task.wait(0.5)
+                    mainBtn.Text = "  " .. tostring(selected)
+                    -- In a full version, this triggers a ScrollingFrame creation over the UI.
+                end)
+            end
+
+            return GroupAPI
         end
 
         return TabAPI
@@ -146,30 +333,4 @@ function NovaLib:CreateWindow(config)
     return WindowAPI
 end
 
--- [ SAVING / CONFIG SYSTEM ] --
-function NovaLib:SaveConfig()
-    local success, json = pcall(function()
-        return HttpService:JSONEncode(self.Flags)
-    end)
-    if success and writefile then
-        writefile(self.ConfigName, json)
-        print("Config Saved!")
-    end
-end
-
-function NovaLib:LoadConfig()
-    if readfile and isfile and isfile(self.ConfigName) then
-        local success, json = pcall(function()
-            return HttpService:JSONDecode(readfile(self.ConfigName))
-        end)
-        if success then
-            for flag, value in pairs(json) do
-                self.Flags[flag] = value
-                -- Note: In a fully fleshed-out lib, you'd trigger the UI updates here too.
-            end
-            print("Config Loaded!")
-        end
-    end
-end
-
-return NovaLib
+return NovaV2
